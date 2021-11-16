@@ -22,13 +22,10 @@ const redisClient = asyncRedis.createClient({
 redisClient.on('error', err => {
   console.log('error ' + err);
 });
+
+const redis_players = 'players';
+const redis_pool = 'pool';
 // REDIS END
-
-// HELPFUL START
-
-const moment = require('moment');
-
-// HELPFUL END
 
 exports.checkUsers = async() => {
   const client = await MongoClient.connect(uri, params);
@@ -80,17 +77,14 @@ exports.checkRedis = async () => {
     
     const result = users.map(async (user) => {
       const userId = user._id.toString();
-
       const ok = await redisClient.exists(userId);
-
       if(ok === 0) {
-        const result = await redisClient.rpush('players', userId);
+        await redisClient.rpush(redis_players, userId);
+        await redisClient.set(userId, 0);
       }
-      
-      await redisClient.set(userId, 0);
     });
 
-    Promise.all(result).then(() => {
+    Promise.all(result).then(async () => {
       // set expiretion to end of week at current time
       const curr = new Date; // get current date
       const first = curr.getDate() - curr.getDay(); // First day is the day of the month - the day of the week
@@ -98,7 +92,14 @@ exports.checkRedis = async () => {
   
       const expireSeconds = curr - last
   
-      redisClient.expire('players', expireSeconds);
+      await redisClient.expire(redis_players, expireSeconds);
+
+      const isPoolExist = await redisClient.exists(redis_pool);
+      if(isPoolExist === 0) {
+        await redisClient.set(redis_pool, 0);
+      }
+
+      await redisClient.expire(redis_pool, expireSeconds);
     })
 
   } catch(err) {
@@ -125,13 +126,17 @@ exports.getUsers = async () => {
       
       const value = await redisClient.get(userId);
       Object.assign(user, {
-        money: parseInt(value)
+        money: parseFloat(value / 100)
       });
     });
 
-    return Promise.all(mapping).then(() => {
-      return users;
+    return Promise.all(mapping)
+    .then(() => {
+      users.sort((a, b) => { return b.money - a.money })
     })
+    .then(() => {
+      return users;
+    });
   } catch(err) {
     console.log(err);
   } finally {
@@ -144,8 +149,17 @@ exports.increase = async (id) => {
   const ok = await redisClient.exists(id);
 
   if(ok === 1) {
-    const newValue = await redisClient.incr(id);
-    return newValue.toString();
+    // add %80 money to player
+    const oldPlayerValue = parseInt(await redisClient.get(id));
+    const newPlayerValue = oldPlayerValue + 80;
+    await redisClient.set(id, newPlayerValue);
+    
+    // add %20 money to pool
+    const oldPoolMoney = parseInt(await redisClient.get(redis_pool));
+    const newPoolMoney = oldPoolMoney + 20;
+    await redisClient.set(redis_pool, newPoolMoney);
+
+    return parseFloat(newPlayerValue / 100).toString();
   } else {
     return 'user not found';
   }
@@ -156,8 +170,12 @@ exports.decrease = async (id) => {
   const ok = await redisClient.exists(id);
 
   if(ok === 1) {
-    const newValue = await redisClient.decr(id);
-    return newValue.toString();
+    // remove %100 money from player
+    const oldPlayerValue = parseInt(await redisClient.get(id));
+    const newPlayerValue = oldPlayerValue - 100;
+    await redisClient.set(id, newPlayerValue);
+
+    return parseFloat(newPlayerValue / 100).toString();
   } else {
     return 'user not found';
   }

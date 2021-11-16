@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const app = express();
 const cors = require('cors');
-const { getUsers, checkUsers, checkRedis, increase } = require('./db');
+const { getUsers, checkUsers, checkRedis, increase, decrease } = require('./db');
 
 app.use(cors());
 app.use(express.json());
@@ -35,7 +35,7 @@ app.post('/decrease', async (req, res) => {
   if(!id) {
     res.send('Please specify id');
   } else {
-    const result = await increase(id)
+    const result = await decrease(id)
     res.send(result);
   }
 });
