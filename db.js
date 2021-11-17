@@ -28,9 +28,10 @@ redisClient.on('error', err => {
 const redis_players = 'players';
 const redis_pool = 'pool';
 const winnerPlayersCount = 100;
+const totalPlayerCount = 100;
 // REDIS END
 
-exports.checkUsers = async() => {
+exports.checkPlayers = async() => {
   const client = await MongoClient.connect(uri, params);
 
   if(!client) {
@@ -40,20 +41,19 @@ exports.checkUsers = async() => {
     const db = client.db(process.env.DB_NAME).collection(process.env.DB_COLLECTION_NAME);
   
     db.find({}).toArray((err, res) => {
-      // check for users and add if not exist
-      const usersCount = 10;
-      let users = [];
-      if(!res.length || res.length < usersCount) {
-        const missingPartStart = usersCount - res.length;
-        for(let i = missingPartStart; i < usersCount; i++) {
-          let user = {
+      // check for players and add if not exist
+      let players = [];
+      if(!res.length || res.length < totalPlayerCount) {
+        const missingPartStart = res.length || 0;
+        for(let i = missingPartStart; i < totalPlayerCount; i++) {
+          let player = {
             name: `player_${i} `,
             country: 'TUR'
           }
-          users.push(user);
+          players.push(player);
         }
     
-        db.insertMany(users, (err, result) => {
+        db.insertMany(players, (err, result) => {
           if(err) throw err;
         });
       }
@@ -61,7 +61,7 @@ exports.checkUsers = async() => {
   } catch(err) {
     console.log(err);
   } finally {
-    console.log('users-check completed');
+    console.log('players-check completed');
     client.close;
   }
 }
@@ -77,15 +77,18 @@ exports.checkRedis = async () => {
   try {
     const db = client.db(process.env.DB_NAME).collection(process.env.DB_COLLECTION_NAME);
     
-    const users = await db.find({}).toArray();
+    const players = await db.find({}).toArray();
     
-    const result = users.map(async (user) => {
-      const userId = user._id.toString();
-      const ok = await redisClient.exists(userId);
+    const result = players.map(async (player) => {
+      const playerId = player._id.toString();
+      const dailyId = this.getDailyId(playerId);
+      
+      const ok = await redisClient.exists(playerId);
       if(ok === 0) {
-        await redisClient.rpush(redis_players, userId);
-        await redisClient.set(userId, 0);
+        await redisClient.rpush(redis_players, playerId);
+        await redisClient.set(playerId, 0);
       }
+      await redisClient.incrby(dailyId, 0);
     });
 
     Promise.all(result).then(async () => {
@@ -106,7 +109,7 @@ exports.checkRedis = async () => {
 exports.schedulePrizeGiving = async () => {
   // set expiretion to end of week
   const curr = new Date;
-  const last = (curr.getDate() - curr.getDay()) + 7;
+  const last = curr.getDate() - curr.getDay() + 7;
   const lastDay = new Date(curr.getFullYear(), curr.getMonth(), last, 23, 59, 59);
 
   const expireSeconds = Math.floor(Math.floor(lastDay - curr) / 1000);
@@ -132,10 +135,10 @@ exports.givePrizes = async () => {
   const poolMoney = parseInt(await redisClient.get(redis_pool));
   // empty pool
   await redisClient.set(redis_pool, 0);
-  // get users to give prizes
-  let users = await redisClient.lrange(redis_players, 0, -1);
-  users.sort((a,b) => { return b.money - a.money });
-  users.slice(0, winnerPlayersCount);
+  // get players to give prizes
+  let players = await redisClient.lrange(redis_players, 0, -1);
+  players.sort((a,b) => { return b.money - a.money });
+  players.slice(0, winnerPlayersCount);
 
   // calculate prizes
   const firstPrize = Math.floor(poolMoney * 20 / 100);
@@ -144,32 +147,46 @@ exports.givePrizes = async () => {
   const elsePrize = Math.floor(poolMoney * 55 / 100 / 97);
 
   //give prizes 
-  const result = users.map(async (user, index) => {
-    if(index === 0) {
-      await redisClient.incrby(user, firstPrize);
-    } else if(index === 1) {
-      await redisClient.incrby(user, secondPrize);
-    } else if(index === 2) {
-      await redisClient.incrby(user, thirdPrize);
-    } else {
-      await redisClient.incrby(user, elsePrize);
-    }
-  });
-
-  Promise.all(result)
-  .then(() => {
-    // reschedule for next week
-    this.schedulePrizeGiving();
-    console.table({
-      firstPrize,
-      secondPrize,
-      thirdPrize,
-      elsePrize
+  setTimeout(() => {
+    const result = players.map(async (player, index) => {
+      if(index === 0) {
+        await redisClient.incrby(player, firstPrize);
+      } else if(index === 1) {
+        await redisClient.incrby(player, secondPrize);
+      } else if(index === 2) {
+        await redisClient.incrby(player, thirdPrize);
+      } else {
+        await redisClient.incrby(player, elsePrize);
+      }
     });
-  });
+
+    Promise.all(result)
+    .then(() => {
+      // reschedule for next week
+      this.schedulePrizeGiving();
+      console.table({
+        firstPrize,
+        secondPrize,
+        thirdPrize,
+        elsePrize
+      });
+    });
+  }, 5000);
 }
 
-exports.getUsers = async () => {
+exports.getDailyId = (playerId, day, month, year) =>  {
+  if(!day || !month || !year) {
+    const curr = new Date;
+    day = curr.getDate();
+    month = curr.getMonth() + 1;
+    year = curr.getFullYear();
+    delete curr;
+  }
+  const dailyId = `${playerId}_${day}-${month}-${year}`;
+  return dailyId
+}
+
+exports.getPlayers = async () => {
   const client = await MongoClient.connect(uri, params);
 
   if(!client) {
@@ -179,57 +196,87 @@ exports.getUsers = async () => {
   try {
     const db = client.db(process.env.DB_NAME).collection(process.env.DB_COLLECTION_NAME);
 
-    const users = await db.find({}).toArray();
-    const mapping = users.map(async (user) => {
-      const userId = user._id.toString();
-      
-      const value = await redisClient.get(userId);
-      Object.assign(user, {
-        money: parseFloat(value / 100)
+    const players = await db.find({}).toArray();
+
+    const mapping = players.map(async (player) => {
+      const playerId = player._id.toString();
+      const dailyId = this.getDailyId(playerId);
+      const dailyMoney = await redisClient.get(dailyId);
+      const weeklyValue = await this.getWeeklyValue(playerId);
+
+      Object.assign(player, {
+        weeklyValue: parseFloat(weeklyValue / 100),
+        dailyValue: parseFloat(dailyMoney / 100)
       });
     });
 
     return Promise.all(mapping)
     .then(() => {
-      users.sort((a, b) => { return b.money - a.money })
+      players.sort((a, b) => { return b.money - a.money })
     })
     .then(() => {
-      return users.slice(0, winnerPlayersCount);
+      return players.slice(0, winnerPlayersCount);
     });
   } catch(err) {
     console.log(err);
   } finally {
-    console.log('get-users completed');
+    console.log('get-players completed');
     client.close();
   }
 }
 
-exports.increase = async (id) => {
-  const ok = await redisClient.exists(id);
+exports.getWeeklyValue = async (playerId) => {
+  const curr = new Date;
+  const first = curr.getDate() - curr.getDay();
+  const currDay = curr.getDate();
+  const currMonth = curr.getMonth() + 1;
+  const currYear = curr.getFullYear();
+  delete curr;
 
-  if(ok === 1) {
-    // add %80 money to player
-    const newPlayervalue = await redisClient.incrby(id, 98);
-    
-    // add %20 money to pool
-    await redisClient.incrby(redis_pool, 2);
+  let totalMoneyOnWeek = 0;
 
-    return parseFloat(newPlayerValue / 100).toString();
-  } else {
-    return 'user not found';
+  for(let i = first; i <= currDay; i++) {
+    const id = this.getDailyId(playerId, i, currMonth, currYear);
+    const value = parseInt(await redisClient.get(id));
+    if(!isNaN(value)) {
+      totalMoneyOnWeek += value;
+    }
   }
+
+  return totalMoneyOnWeek;
+}
+
+exports.increase = async (id) => {
+  id = id.toString();
+  const idDaily = this.getDailyId(id);
+
+  // add %98 money to player
+  const dailyValue = await redisClient.incrby(idDaily, 98);
+  const totalValue = await redisClient.incrby(id, 98);
+  const weeklyValue = await this.getWeeklyValue(id);
+
+  // add %2 money to pool
+  await redisClient.incrby(redis_pool, 2);
+
+  const obj = {
+    dailyValue: parseFloat(dailyValue / 100).toString(),
+    weeklyValue: parseFloat(weeklyValue / 100).toString(),
+  }
+
+  return JSON.stringify(obj);
 }
 
 exports.decrease = async (id) => {
   id = id.toString();
-  const ok = await redisClient.exists(id);
+  const idDaily = this.getDailyId(id);
+  const dailyValue = await redisClient.decrby(idDaily, 100);
+  const totalValue = await redisClient.decrby(id, 100);
+  const weeklyValue = await this.getWeeklyValue(id);
 
-  if(ok === 1) {
-    // remove %100 money from player
-    const newPlayerValue = await redisClient.decrby(id, 100);
-
-    return parseFloat(newPlayerValue / 100).toString();
-  } else {
-    return 'user not found';
+  const ojb = {
+    dailyValue: parseFloat(dailyValue / 100).toString(),
+    weeklyValue: parseFloat(weeklyValue / 100).toString()
   }
+
+  return JSON.stringify(obj);
 }

@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const app = express();
 const cors = require('cors');
-const { getUsers, checkUsers, checkRedis, increase, decrease, schedulePrizeGiving } = require('./db');
+const { getPlayers, checkPlayers, checkRedis, increase, decrease, schedulePrizeGiving } = require('./db');
 
 app.use(cors());
 app.use(express.json());
@@ -10,7 +10,7 @@ app.use(express.json());
 const PORT = process.env.SERVER_PORT;
 
 (async function() {
-  await checkUsers();
+  await checkPlayers();
   await checkRedis();
   await schedulePrizeGiving();
 })();
@@ -41,10 +41,10 @@ app.post('/decrease', async (req, res) => {
   }
 });
 
-app.get('/users', async (req, res) => {
-  const users = await getUsers();
+app.get('/players', async (req, res) => {
+  const players = await getPlayers();
 
-  res.send(users);
+  res.send(players);
 });
 
 app.listen(PORT, () => {
