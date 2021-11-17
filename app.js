@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const app = express();
 const cors = require('cors');
-const { getUsers, checkUsers, checkRedis, increase, decrease } = require('./db');
+const { getUsers, checkUsers, checkRedis, increase, decrease, schedulePrizeGiving } = require('./db');
 
 app.use(cors());
 app.use(express.json());
@@ -12,6 +12,7 @@ const PORT = process.env.SERVER_PORT;
 (async function() {
   await checkUsers();
   await checkRedis();
+  await schedulePrizeGiving();
 })();
 
 app.get('/', (req, res) => {

@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "async-redis": "^2.0.0",
+    "asyncjs": "^0.0.13",
     "bootstrap": "^5.1.3",
     "cors": "^2.8.5",
     "dotenv": "^10.0.0",

@@ -1,3 +1,5 @@
+// TODO: consider adding websocket for realtime showing
+
 // DB START
 const { MongoClient } = require('mongodb');
 
@@ -25,6 +27,7 @@ redisClient.on('error', err => {
 
 const redis_players = 'players';
 const redis_pool = 'pool';
+const winnerPlayersCount = 100;
 // REDIS END
 
 exports.checkUsers = async() => {
@@ -41,7 +44,8 @@ exports.checkUsers = async() => {
       const usersCount = 10;
       let users = [];
       if(!res.length || res.length < usersCount) {
-        for(let i = 0; i < usersCount; i++) {
+        const missingPartStart = usersCount - res.length;
+        for(let i = missingPartStart; i < usersCount; i++) {
           let user = {
             name: `player_${i} `,
             country: 'TUR'
@@ -85,22 +89,11 @@ exports.checkRedis = async () => {
     });
 
     Promise.all(result).then(async () => {
-      // set expiretion to end of week at current time
-      const curr = new Date; // get current date
-      const first = curr.getDate() - curr.getDay(); // First day is the day of the month - the day of the week
-      const last = first + 6; // last day is the first day + 6
-  
-      const expireSeconds = curr - last
-  
-      await redisClient.expire(redis_players, expireSeconds);
-
       const isPoolExist = await redisClient.exists(redis_pool);
       if(isPoolExist === 0) {
         await redisClient.set(redis_pool, 0);
-      }
-
-      await redisClient.expire(redis_pool, expireSeconds);
-    })
+      };
+    });
 
   } catch(err) {
     console.log(err);
@@ -108,6 +101,66 @@ exports.checkRedis = async () => {
     console.log('check-redis completed');
     client.close();
   }
+}
+
+exports.schedulePrizeGiving = async () => {
+  // set expiretion to end of week
+  const curr = new Date;
+  const last = (curr.getDate() - curr.getDay()) + 7;
+  const lastDay = new Date(curr.getFullYear(), curr.getMonth(), last, 23, 59, 59);
+
+  // const expireSeconds = Math.floor(Math.floor(lastDay - curr) / 1000);
+  expireSeconds = 15;
+
+  const task = setTimeout(async () => {
+    const players = await redisClient.lrange(redis_players, 0, -1);
+    if(players.length) {
+      this.givePrizes();
+    }
+  }, expireSeconds * 1000);
+  console.log(`Prize will be given after ${expireSeconds} seconds.`);
+}
+
+exports.givePrizes = async () => {
+  // get poolMoney
+  const poolMoney = parseInt(await redisClient.get(redis_pool));
+  // empty pool
+  await redisClient.set(redis_pool, 0);
+  // get users to give prizes
+  let users = await redisClient.lrange(redis_players, 0, -1);
+  users.sort((a,b) => { return b.money - a.money });
+  users.slice(0, winnerPlayersCount);
+
+  // calculate prizes
+  const firstPrize = Math.floor(poolMoney * 20 / 100);
+  const secondPrize = Math.floor(poolMoney * 15 / 100);
+  const thirdPrize = Math.floor(poolMoney * 10 / 100);
+  const elsePrize = Math.floor(poolMoney * 55 / 100 / 97);
+
+  //give prizes 
+  const result = users.map(async (user, index) => {
+    if(index === 0) {
+      await redisClient.incrby(user, firstPrize);
+    } else if(index === 1) {
+      await redisClient.incrby(user, secondPrize);
+    } else if(index === 2) {
+      await redisClient.incrby(user, thirdPrize);
+    } else {
+      await redisClient.incrby(user, elsePrize);
+    }
+  });
+
+  Promise.all(result)
+  .then(() => {
+    // reschedule for next week
+    this.schedulePrizeGiving();
+    console.table({
+      firstPrize,
+      secondPrize,
+      thirdPrize,
+      elsePrize
+    });
+  });
 }
 
 exports.getUsers = async () => {
@@ -135,7 +188,7 @@ exports.getUsers = async () => {
       users.sort((a, b) => { return b.money - a.money })
     })
     .then(() => {
-      return users;
+      return users.slice(0, winnerPlayersCount);
     });
   } catch(err) {
     console.log(err);
@@ -151,12 +204,12 @@ exports.increase = async (id) => {
   if(ok === 1) {
     // add %80 money to player
     const oldPlayerValue = parseInt(await redisClient.get(id));
-    const newPlayerValue = oldPlayerValue + 80;
+    const newPlayerValue = oldPlayerValue + 98;
     await redisClient.set(id, newPlayerValue);
     
     // add %20 money to pool
     const oldPoolMoney = parseInt(await redisClient.get(redis_pool));
-    const newPoolMoney = oldPoolMoney + 20;
+    const newPoolMoney = oldPoolMoney + 2;
     await redisClient.set(redis_pool, newPoolMoney);
 
     return parseFloat(newPlayerValue / 100).toString();
