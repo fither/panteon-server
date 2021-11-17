@@ -109,13 +109,19 @@ exports.schedulePrizeGiving = async () => {
   const last = (curr.getDate() - curr.getDay()) + 7;
   const lastDay = new Date(curr.getFullYear(), curr.getMonth(), last, 23, 59, 59);
 
-  // const expireSeconds = Math.floor(Math.floor(lastDay - curr) / 1000);
-  expireSeconds = 15;
+  const expireSeconds = Math.floor(Math.floor(lastDay - curr) / 1000);
+  // expireSeconds = 15;
 
   const task = setTimeout(async () => {
     const players = await redisClient.lrange(redis_players, 0, -1);
+    // if players exist give prizes
     if(players.length) {
       this.givePrizes();
+    } else {
+      // if players not exist reschedule for next week
+      setTimeout(() => {
+        this.schedulePrizeGiving();
+      }, 5000);
     }
   }, expireSeconds * 1000);
   console.log(`Prize will be given after ${expireSeconds} seconds.`);
@@ -203,14 +209,10 @@ exports.increase = async (id) => {
 
   if(ok === 1) {
     // add %80 money to player
-    const oldPlayerValue = parseInt(await redisClient.get(id));
-    const newPlayerValue = oldPlayerValue + 98;
-    await redisClient.set(id, newPlayerValue);
+    const newPlayervalue = await redisClient.incrby(id, 98);
     
     // add %20 money to pool
-    const oldPoolMoney = parseInt(await redisClient.get(redis_pool));
-    const newPoolMoney = oldPoolMoney + 2;
-    await redisClient.set(redis_pool, newPoolMoney);
+    await redisClient.incrby(redis_pool, 2);
 
     return parseFloat(newPlayerValue / 100).toString();
   } else {
@@ -224,9 +226,7 @@ exports.decrease = async (id) => {
 
   if(ok === 1) {
     // remove %100 money from player
-    const oldPlayerValue = parseInt(await redisClient.get(id));
-    const newPlayerValue = oldPlayerValue - 100;
-    await redisClient.set(id, newPlayerValue);
+    const newPlayerValue = await redisClient.decrby(id, 100);
 
     return parseFloat(newPlayerValue / 100).toString();
   } else {
