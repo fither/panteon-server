@@ -1,7 +1,6 @@
 // TODO: consider adding websocket for realtime showing
 
-const { 
-  NODE_ENV,
+const {
   DB_NAME,
   DB_COLLECTION_NAME,
   DB_USER,
@@ -29,9 +28,9 @@ const params = {
 // REDIS START
 const asyncRedis = require("async-redis");
 const redisClient = asyncRedis.createClient({
-  host: NODE_ENV === 'production' ? REDIS_HOST_SERVER : REDIS_HOST_LOCAL,
-  port: NODE_ENV === 'production' ? REDIS_PORT_SERVER : REDIS_PORT_LOCAL,
-  auth_pass: NODE_ENV === 'production' ? REDIS_PASSWORD : ''
+  host: process.env.NODE_ENV === 'production' ? REDIS_HOST_SERVER : REDIS_HOST_LOCAL,
+  port: process.env.NODE_ENV === 'production' ? REDIS_PORT_SERVER : REDIS_PORT_LOCAL,
+  auth_pass: process.env.NODE_ENV === 'production' ? REDIS_PASSWORD : ''
 });
 
 redisClient.on('error', err => {
