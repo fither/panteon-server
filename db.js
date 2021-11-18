@@ -1,4 +1,5 @@
 // TODO: consider adding websocket for realtime showing
+// TODO: use redis instead of async-redis to use zcard data-type for storing data
 
 const {
   DB_NAME,
