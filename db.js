@@ -41,7 +41,7 @@ redisClient.on('error', err => {
 const redis_players = 'players';
 const redis_pool = 'pool';
 const winnerPlayersCount = 100;
-const totalPlayerCount = 100;
+const totalPlayerCount = 10000;
 // REDIS END
 
 exports.checkPlayers = async() => {
