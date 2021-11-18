@@ -7,7 +7,7 @@ const { getPlayers, checkPlayers, checkRedis, increase, decrease, schedulePrizeG
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.SERVER_PORT;
+const PORT = process.env.PORT || process.env.SERVER_PORT;
 
 (async function() {
   await checkPlayers();
