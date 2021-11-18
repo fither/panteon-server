@@ -1,10 +1,22 @@
 // TODO: consider adding websocket for realtime showing
 
+const { 
+  NODE_ENV,
+  DB_NAME,
+  DB_COLLECTION_NAME,
+  DB_USER,
+  DB_PASSWORD,
+  REDIS_HOST_LOCAL,
+  REDIS_HOST_SERVER,
+  REDIS_PORT_LOCAL,
+  REDIS_PORT_SERVER,
+  REDIS_PASSWORD
+} = require('dotenv').config().parsed;
+
 // DB START
 const { MongoClient } = require('mongodb');
 
-const db_password = encodeURIComponent(process.env.DB_PASSWORD);
-const uri = `mongodb+srv://${process.env.DB_USER}:${db_password}@test.bkwis.mongodb.net/panteon?retryWrites=true&w=majority`;
+const uri = `mongodb+srv://${DB_USER}:${DB_PASSWORD}@test.bkwis.mongodb.net/panteon?retryWrites=true&w=majority`;
 const params = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -15,17 +27,11 @@ const params = {
 // DB END
 
 // REDIS START
-redis_host_local = 'localhost';
-redis_host_server = 'ec2-34-254-61-94.eu-west-1.compute.amazonaws.com';
-redis_port_local = 6379;
-redis_port_server = 20309
-redis_password_server = 'p0712441886218b236f190a49489f538923316d82083984cb3852ff91dc448b4f';
-
 const asyncRedis = require("async-redis");
 const redisClient = asyncRedis.createClient({
-  host: process.env.NODE_ENV === 'production' ? redis_host_server : redis_host_local,
-  port: process.env.NODE_ENV === 'production' ? redis_port_server : redis_port_local,
-  auth_pass: process.env.NODE_ENV === 'production' ? redis_password_server : ''
+  host: NODE_ENV === 'production' ? REDIS_HOST_SERVER : REDIS_HOST_LOCAL,
+  port: NODE_ENV === 'production' ? REDIS_PORT_SERVER : REDIS_PORT_LOCAL,
+  auth_pass: NODE_ENV === 'production' ? REDIS_PASSWORD : ''
 });
 
 redisClient.on('error', err => {
@@ -45,7 +51,7 @@ exports.checkPlayers = async() => {
     return;
   }
   try {
-    const db = client.db(process.env.DB_NAME).collection(process.env.DB_COLLECTION_NAME);
+    const db = client.db(DB_NAME).collection(DB_COLLECTION_NAME);
   
     db.find({}).toArray((err, res) => {
       // check for players and add if not exist
@@ -82,7 +88,7 @@ exports.checkRedis = async () => {
   }
 
   try {
-    const db = client.db(process.env.DB_NAME).collection(process.env.DB_COLLECTION_NAME);
+    const db = client.db(DB_NAME).collection(DB_COLLECTION_NAME);
     
     const players = await db.find({}).toArray();
     
@@ -201,7 +207,7 @@ exports.getPlayers = async () => {
   }
 
   try {
-    const db = client.db(process.env.DB_NAME).collection(process.env.DB_COLLECTION_NAME);
+    const db = client.db(DB_NAME).collection(DB_COLLECTION_NAME);
 
     const players = await db.find({}).toArray();
 
