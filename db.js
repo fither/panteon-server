@@ -15,10 +15,15 @@ const params = {
 // DB END
 
 // REDIS START
+redis_host_local = 'localhost';
+redis_host_server = 'ec2-34-254-61-94.eu-west-1.compute.amazonaws.com';
+redis_port_local = 6379;
+redis_port_server = 20309
+
 const asyncRedis = require("async-redis");
 const redisClient = asyncRedis.createClient({
-  host: process.env.NODE_ENV === 'production' ? 'ec2-34-254-61-94.eu-west-1.compute.amazonaws.com' : 'localhost',
-  port: process.env.NODE_ENV === 'production' ? 20310 : 6379
+  host: process.env.NODE_ENV === 'production' ? redis_host_server : redis_host_local,
+  port: process.env.NODE_ENV === 'production' ? redis_port_server : redis_port_local
 });
 
 redisClient.on('error', err => {
