@@ -17,8 +17,8 @@ const params = {
 // REDIS START
 const asyncRedis = require("async-redis");
 const redisClient = asyncRedis.createClient({
-  host: 'localhost',
-  port: 6379
+  host: process.env.NODE_ENV === 'production' ? 'ec2-34-254-61-94.eu-west-1.compute.amazonaws.com' : 'localhost',
+  port: process.env.NODE_ENV === 'production' ? 20310 : 6379
 });
 
 redisClient.on('error', err => {
@@ -212,7 +212,7 @@ exports.getPlayers = async () => {
 
     return Promise.all(mapping)
     .then(() => {
-      players.sort((a, b) => { return b.money - a.money })
+      players.sort((a, b) => { return b.weeklyValue - a.weeklyValue })
     })
     .then(() => {
       return players.slice(0, winnerPlayersCount);
@@ -273,7 +273,7 @@ exports.decrease = async (id) => {
   const totalValue = await redisClient.decrby(id, 100);
   const weeklyValue = await this.getWeeklyValue(id);
 
-  const ojb = {
+  const obj = {
     dailyValue: parseFloat(dailyValue / 100).toString(),
     weeklyValue: parseFloat(weeklyValue / 100).toString()
   }
