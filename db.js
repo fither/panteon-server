@@ -19,11 +19,13 @@ redis_host_local = 'localhost';
 redis_host_server = 'ec2-34-254-61-94.eu-west-1.compute.amazonaws.com';
 redis_port_local = 6379;
 redis_port_server = 20309
+redis_password_server = 'p0712441886218b236f190a49489f538923316d82083984cb3852ff91dc448b4f';
 
 const asyncRedis = require("async-redis");
 const redisClient = asyncRedis.createClient({
   host: process.env.NODE_ENV === 'production' ? redis_host_server : redis_host_local,
-  port: process.env.NODE_ENV === 'production' ? redis_port_server : redis_port_local
+  port: process.env.NODE_ENV === 'production' ? redis_port_server : redis_port_local,
+  auth_pass: process.env.NODE_ENV === 'production' ? redis_password_server : ''
 });
 
 redisClient.on('error', err => {
